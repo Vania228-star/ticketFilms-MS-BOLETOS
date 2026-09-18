@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ticketfilms.ms_boletos.client.AsientosClient;
 import com.ticketfilms.ms_boletos.dto.AsientoCompraDto;
 import com.ticketfilms.ms_boletos.dto.BoletoResponseDto;
 import com.ticketfilms.ms_boletos.dto.ConfirmarCompraRequestDto;
@@ -19,24 +20,26 @@ import com.ticketfilms.ms_boletos.service.support.CodigoBoletoGenerator;
 
 import lombok.RequiredArgsConstructor;
 
-//  NO se llama todavía a ms-asientos para marcar los
-// asientos como OCUPADO: ese endpoint aún no existe en ms-asientos
-// (solo está /api/asientos/reserva). Se asume que el frontend ya reservó
-// los asientos antes de llegar a este paso. Ver TODO más abajo.
 @Service
 @RequiredArgsConstructor
 public class BoletoService {
 
     private final BoletoRepository boletoRepository;
     private final CodigoBoletoGenerator codigoBoletoGenerator;
+    private final AsientosClient asientosClient;
 
     @Transactional
-    public BoletoResponseDto confirmarCompra(String usuarioId, ConfirmarCompraRequestDto request) {
+    public BoletoResponseDto confirmarCompra(String usuarioId, String bearerToken, ConfirmarCompraRequestDto request) {
 
-        // TODO: cuando ms-asientos exponga el endpoint de confirmar/ocupar,
-        // llamarlo ACÁ antes de persistir el boleto, y abortar la compra
-        // (lanzar excepción -> 409) si algún asiento ya no está reservado
-        // a nombre de este usuario.
+        List<Long> asientoIds = request.getAsientos().stream()
+                .map(AsientoCompraDto::getAsientoId)
+                .collect(Collectors.toList());
+
+        // Confirma en ms-asientos ANTES de persistir el boleto: pasa los
+        // asientos de RESERVADO a OCUPADO. Si falla (expiró, es de otro
+        // usuario, ya no existe), se aborta la compra y no se guarda nada.
+        asientosClient.confirmarAsientos(bearerToken, request.getFuncionId(), asientoIds);
+
         BigDecimal total = request.getAsientos().stream()
                 .map(AsientoCompraDto::getPrecio)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -67,7 +70,6 @@ public class BoletoService {
         return aResponseDto(guardado);
     }
 
-    //historial de boletos del usuario autenticado
     public List<BoletoResponseDto> obtenerHistorial(String usuarioId) {
         return boletoRepository.findByUsuarioIdOrderByFechaCompraDesc(usuarioId)
                 .stream()
@@ -75,7 +77,6 @@ public class BoletoService {
                 .collect(Collectors.toList());
     }
 
-    //usado por la pantalla de confirmación / lectura de QR
     public BoletoResponseDto obtenerPorCodigo(String codigoBoleto) {
         Boleto boleto = boletoRepository.findByCodigoBoleto(codigoBoleto)
                 .orElseThrow(() -> new IllegalArgumentException("Boleto no encontrado: " + codigoBoleto));

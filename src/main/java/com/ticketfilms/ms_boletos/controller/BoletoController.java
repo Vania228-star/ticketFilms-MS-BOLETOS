@@ -20,9 +20,6 @@ import com.ticketfilms.ms_boletos.service.BoletoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
-// El usuarioId nunca se recibe del body: siempre
-// se extrae del JWT ya validado por el Resource Server,
-// para que nadie pueda comprar o consultar boletos a nombre de otro.
 @RestController
 @RequestMapping("/api/boletos")
 @RequiredArgsConstructor
@@ -36,7 +33,9 @@ public class BoletoController {
         @Valid @RequestBody ConfirmarCompraRequestDto request
     ) {
         String usuarioId = extraerUsuarioId(jwt);
-        BoletoResponseDto boleto = boletoService.confirmarCompra(usuarioId, request);
+        // Se reenvía el JWT crudo a ms-asientos para confirmar los asientos
+        // a nombre del mismo usuario que está comprando.
+        BoletoResponseDto boleto = boletoService.confirmarCompra(usuarioId, jwt.getTokenValue(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(boleto);
     }
 
@@ -51,8 +50,6 @@ public class BoletoController {
         return ResponseEntity.ok(boletoService.obtenerPorCodigo(codigo));
     }
 
-    // Google ID tokens usan "sub" como identificador estable del usuario.
-    // Se deja email como fallback por si se prueba con un token simplificado.
     private String extraerUsuarioId(Jwt jwt) {
         String sub = jwt.getClaimAsString("sub");
         if (sub != null) return sub;

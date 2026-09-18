@@ -10,31 +10,49 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-// Traduce excepciones de negocio a códigos HTTP correctos, en vez de
-// dejar que Spring devuelva 500 genérico para todo. RNF-06: mantiene la
-// lógica de errores centralizada y fuera de los controllers.
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    // Ej: BoletoService.obtenerPorCodigo cuando el código no existe
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleNotFound(IllegalArgumentException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(cuerpoError(HttpStatus.NOT_FOUND, ex.getMessage()));
     }
 
-    // Ej: CodigoBoletoGenerator si agota los reintentos
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<Map<String, Object>> handleConflict(IllegalStateException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(cuerpoError(HttpStatus.CONFLICT, ex.getMessage()));
     }
 
-    // Errores de @Valid en el body del request (ej. ConfirmarCompraRequestDto incompleto)
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
         String detalle = ex.getBindingResult().getFieldErrors().stream()
             .map(err -> err.getField() + ": " + err.getDefaultMessage())
             .collect(Collectors.joining(", "));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(cuerpoError(HttpStatus.BAD_REQUEST, detalle));
+    }
+
+    // Asiento(s) ya no disponibles (no existen o no estaban RESERVADO) al confirmar
+    @ExceptionHandler(AsientoNoDisponibleException.class)
+    public ResponseEntity<Map<String, Object>> handleAsientoNoDisponible(AsientoNoDisponibleException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(cuerpoError(HttpStatus.CONFLICT, ex.getMessage()));
+    }
+
+    // La reserva en ms-asientos pertenece a otro usuario
+    @ExceptionHandler(ReservaAjenaException.class)
+    public ResponseEntity<Map<String, Object>> handleReservaAjena(ReservaAjenaException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(cuerpoError(HttpStatus.FORBIDDEN, ex.getMessage()));
+    }
+
+    // La reserva temporal (5 min) ya expiró en ms-asientos
+    @ExceptionHandler(ReservaExpiradaException.class)
+    public ResponseEntity<Map<String, Object>> handleReservaExpirada(ReservaExpiradaException ex) {
+        return ResponseEntity.status(HttpStatus.GONE).body(cuerpoError(HttpStatus.GONE, ex.getMessage()));
+    }
+
+    // ms-asientos no respondió o devolvió un error inesperado
+    @ExceptionHandler(AsientosServiceException.class)
+    public ResponseEntity<Map<String, Object>> handleAsientosServiceDown(AsientosServiceException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(cuerpoError(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage()));
     }
 
     private Map<String, Object> cuerpoError(HttpStatus status, String mensaje) {
