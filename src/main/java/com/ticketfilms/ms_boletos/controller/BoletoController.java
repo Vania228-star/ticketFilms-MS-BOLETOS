@@ -46,8 +46,12 @@ public class BoletoController {
     }
 
     @GetMapping("/{codigo}")
-    public ResponseEntity<BoletoResponseDto> obtenerPorCodigo(@PathVariable String codigo) {
-        return ResponseEntity.ok(boletoService.obtenerPorCodigo(codigo));
+    public ResponseEntity<BoletoResponseDto> obtenerPorCodigo(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable String codigo
+    ) {
+        String usuarioId = extraerUsuarioId(jwt);
+        return ResponseEntity.ok(boletoService.obtenerPorCodigo(usuarioId, codigo));
     }
 
     private String extraerUsuarioId(Jwt jwt) {

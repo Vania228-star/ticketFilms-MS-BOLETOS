@@ -1,21 +1,40 @@
 package com.ticketfilms.ms_boletos.exception;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.RestControllerAdvice;
-
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, Object>> handleNotFound(IllegalArgumentException ex) {
+    // Boleto inexistente, o que pertenece a otro usuario (no se revela cuál de los dos)
+    @ExceptionHandler(BoletoNoEncontradoException.class)
+    public ResponseEntity<Map<String, Object>> handleNotFound(BoletoNoEncontradoException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(cuerpoError(HttpStatus.NOT_FOUND, ex.getMessage()));
+    }
+
+    @ExceptionHandler(CategoriaInvalidaException.class)
+    public ResponseEntity<Map<String, Object>> handleCategoriaInvalida(CategoriaInvalidaException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(cuerpoError(HttpStatus.BAD_REQUEST, ex.getMessage()));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleBadRequest(IllegalArgumentException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(cuerpoError(HttpStatus.BAD_REQUEST, ex.getMessage()));
+    }
+
+    // JSON mal formado o con caracteres inválidos: respuesta limpia, sin stack trace
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleJsonInvalido(HttpMessageNotReadableException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(cuerpoError(HttpStatus.BAD_REQUEST, "El cuerpo de la solicitud no es un JSON válido"));
     }
 
     @ExceptionHandler(IllegalStateException.class)
@@ -60,7 +79,7 @@ public class GlobalExceptionHandler {
             "timestamp", LocalDateTime.now().toString(),
             "status", status.value(),
             "error", status.getReasonPhrase(),
-            "mensaje", mensaje
+            "mensaje", mensaje != null ? mensaje : status.getReasonPhrase()
         );
     }
 }

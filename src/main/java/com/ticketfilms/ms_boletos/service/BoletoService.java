@@ -11,6 +11,8 @@ import com.ticketfilms.ms_boletos.client.AsientosClient;
 import com.ticketfilms.ms_boletos.dto.AsientoCompraDto;
 import com.ticketfilms.ms_boletos.dto.BoletoResponseDto;
 import com.ticketfilms.ms_boletos.dto.ConfirmarCompraRequestDto;
+import com.ticketfilms.ms_boletos.exception.BoletoNoEncontradoException;
+import com.ticketfilms.ms_boletos.exception.CategoriaInvalidaException;
 import com.ticketfilms.ms_boletos.model.Boleto;
 import com.ticketfilms.ms_boletos.model.BoletoAsiento;
 import com.ticketfilms.ms_boletos.model.CategoriaAsiento;
@@ -57,7 +59,7 @@ public class BoletoService {
         }
 
         // Paso 3: marcar CONFIRMADO. Si esto fallara, el boleto queda PENDIENTE
-        // con los asientos ya OCUPADO: es detectable y corregible (ver consulta).
+        // con los asientos ya OCUPADO: es detectable y corregible.
         return transactionTemplate.execute(status -> {
             Boleto b = boletoRepository.findByCodigoBoleto(codigo).orElseThrow();
             b.setEstado(EstadoBoleto.CONFIRMADO);
@@ -88,11 +90,22 @@ public class BoletoService {
                         .asientoId(a.getAsientoId())
                         .fila(a.getFila())
                         .numero(a.getNumero())
-                        .categoria(CategoriaAsiento.valueOf(a.getCategoria()))
+                        .categoria(parsearCategoria(a.getCategoria()))
                         .precioPagado(a.getPrecio())
                         .build()
         ));
         return boleto;
+    }
+
+    private CategoriaAsiento parsearCategoria(String categoria) {
+        if (categoria == null) {
+            throw new CategoriaInvalidaException(null);
+        }
+        try {
+            return CategoriaAsiento.valueOf(categoria.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new CategoriaInvalidaException(categoria);
+        }
     }
 
     private void cambiarEstado(String codigo, EstadoBoleto nuevoEstado) {
@@ -111,9 +124,12 @@ public class BoletoService {
                 .collect(Collectors.toList());
     }
 
-    public BoletoResponseDto obtenerPorCodigo(String codigoBoleto) {
+    // Solo el dueño puede ver su boleto. Si no existe o es de otro usuario,
+    // la respuesta es la misma (404) para no revelar qué códigos existen.
+    public BoletoResponseDto obtenerPorCodigo(String usuarioId, String codigoBoleto) {
         Boleto boleto = boletoRepository.findByCodigoBoleto(codigoBoleto)
-                .orElseThrow(() -> new IllegalArgumentException("Boleto no encontrado: " + codigoBoleto));
+                .filter(b -> usuarioId.equals(b.getUsuarioId()))
+                .orElseThrow(() -> new BoletoNoEncontradoException(codigoBoleto));
         return aResponseDto(boleto);
     }
 
