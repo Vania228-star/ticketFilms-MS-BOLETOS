@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  ms-boletos:
+    build: .
+    container_name: ms-boletos-container
+    ports:
+      - "8083:8083"
+    environment:
+      - DB_URL=${DB_URL}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - COGNITO_ISSUER_URI=${COGNITO_ISSUER_URI}
+    restart: always
